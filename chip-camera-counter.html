@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Chip Cam</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #080b0f;
+  --surface: rgba(255,255,255,0.05);
+  --surface2: rgba(255,255,255,0.09);
+  --border: rgba(255,255,255,0.1);
+  --text: #f0f4f8;
+  --muted: rgba(240,244,248,0.45);
+  --orange: #f97316;
+  --brown: #b45309;
+  --pink: #ec4899;
+  --blue: #3b82f6;
+  --green: #22c55e;
+  --accent: #f97316;
+}
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+.noise {
+  position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+  opacity: 0.4;
+}
+
+.header {
+  position: relative; z-index: 10;
+  padding: 16px 20px 10px;
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  background: rgba(8,11,15,0.8);
+  backdrop-filter: blur(12px);
+}
+
+.logo { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 800; letter-spacing: -0.5px; }
+.logo span { color: var(--orange); }
+
+.status-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #555; display: inline-block; margin-right: 6px;
+  transition: background 0.3s;
+}
+.status-dot.live { background: var(--green); box-shadow: 0 0 6px var(--green); animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+.status-text { font-size: 12px; color: var(--muted); font-family: 'DM Mono', monospace; }
+
+.cam-section {
+  position: relative; flex: 1; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  background: #000;
+  max-height: 52vh;
+}
+
+#video {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+#overlay {
+  position: absolute; inset: 0;
+  pointer-events: none;
+}
+
+.scan-line {
+  position: absolute; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--orange), transparent);
+  animation: scandown 2.5s linear infinite;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.scan-line.active { opacity: 0.6; }
+@keyframes scandown { 0%{top:0%} 100%{top:100%} }
+
+.cam-placeholder {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 12px; color: var(--muted); text-align: center; padding: 40px 30px;
+}
+
+.cam-icon {
+  width: 64px; height: 64px; border-radius: 50%;
+  background: var(--surface); border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center; font-size: 28px;
+}
+
+.cam-placeholder h2 { font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 700; color: var(--text); }
+.cam-placeholder p { font-size: 13px; line-height: 1.6; max-width: 240px; }
+
+#startBtn {
+  margin-top: 8px;
+  background: var(--orange); color: #fff; border: none;
+  font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 700;
+  padding: 12px 28px; border-radius: 50px; cursor: pointer;
+  transition: transform 0.15s, opacity 0.15s;
+}
+#startBtn:active { transform: scale(0.96); opacity: 0.85; }
+
+.capture-btn-wrap {
+  position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+  z-index: 5; display: none;
+}
+
+.capture-btn {
+  width: 64px; height: 64px; border-radius: 50%;
+  background: #fff; border: 4px solid rgba(255,255,255,0.3);
+  cursor: pointer; transition: transform 0.1s;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.15);
+}
+.capture-btn:active { transform: scale(0.92); }
+.capture-btn-inner {
+  width: 48px; height: 48px; border-radius: 50%;
+  background: #fff; border: 3px solid #ddd;
+}
+
+.results-section {
+  position: relative; z-index: 10;
+  padding: 14px 16px;
+  background: rgba(8,11,15,0.95);
+  backdrop-filter: blur(20px);
+  border-top: 1px solid var(--border);
+}
+
+.chips-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+  margin-bottom: 12px;
+}
+
+.chip-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 10px 8px; text-align: center;
+  transition: border-color 0.3s, background 0.3s;
+}
+
+.chip-card.detected { background: var(--surface2); }
+
+.chip-swatch {
+  width: 32px; height: 32px; border-radius: 50%;
+  margin: 0 auto 6px; border: 2px solid rgba(255,255,255,0.2);
+}
+
+.chip-count {
+  font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 800;
+  line-height: 1; color: var(--text); margin-bottom: 2px;
+}
+
+.chip-val {
+  font-size: 10px; color: var(--muted); font-family: 'DM Mono', monospace;
+}
+
+.total-row {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 12px 16px; margin-bottom: 10px;
+}
+
+.total-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+.total-amount {
+  font-family: 'Syne', sans-serif; font-size: 28px; font-weight: 800;
+  color: var(--orange); letter-spacing: -1px;
+}
+
+.actions { display: flex; gap: 8px; }
+
+.btn-reset {
+  flex: 1; padding: 12px; border-radius: 10px;
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--muted); font-family: 'DM Sans', sans-serif; font-size: 14px;
+  cursor: pointer; transition: background 0.15s, color 0.15s;
+}
+.btn-reset:active { background: var(--surface2); color: var(--text); }
+
+.btn-snap {
+  flex: 2; padding: 12px; border-radius: 10px;
+  background: var(--orange); border: none;
+  color: #fff; font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 700;
+  cursor: pointer; transition: opacity 0.15s, transform 0.1s;
+  display: none;
+}
+.btn-snap:active { opacity: 0.85; transform: scale(0.98); }
+
+.debug-info {
+  font-family: 'DM Mono', monospace; font-size: 10px; color: var(--muted);
+  margin-top: 8px; text-align: center; min-height: 14px;
+}
+
+.result-overlay {
+  position: absolute; inset: 0; pointer-events: none;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity 0.3s;
+}
+.result-overlay.show { opacity: 1; }
+.result-flash {
+  background: rgba(249,115,22,0.15); border: 2px solid var(--orange);
+  border-radius: 16px; padding: 20px 30px; text-align: center;
+  backdrop-filter: blur(8px);
+}
+.result-flash h3 { font-family: 'Syne', sans-serif; font-size: 24px; font-weight: 800; color: var(--orange); }
+.result-flash p { font-size: 13px; color: var(--muted); margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<div class="noise"></div>
+
+<div class="header">
+  <div class="logo">Chip<span>Cam</span></div>
+  <div style="display:flex;align-items:center;">
+    <span class="status-dot" id="statusDot"></span>
+    <span class="status-text" id="statusText">OFFLINE</span>
+  </div>
+</div>
+
+<div class="cam-section" id="camSection">
+  <video id="video" autoplay playsinline muted></video>
+  <canvas id="overlay" style="display:none;"></canvas>
+  <div class="scan-line" id="scanLine"></div>
+
+  <div class="result-overlay" id="resultOverlay">
+    <div class="result-flash">
+      <h3 id="flashTotal">$0</h3>
+      <p id="flashDetail"></p>
+    </div>
+  </div>
+
+  <div class="cam-placeholder" id="placeholder">
+    <div class="cam-icon">📷</div>
+    <h2>Point at your chips</h2>
+    <p>Uses your camera to detect chip colors and calculate the total value automatically.</p>
+    <button id="startBtn" onclick="startCamera()">Start Camera</button>
+  </div>
+
+  <div class="capture-btn-wrap" id="captureBtnWrap">
+    <div class="capture-btn" onclick="captureAndAnalyze()">
+      <div class="capture-btn-inner"></div>
+    </div>
+  </div>
+</div>
+
+<div class="results-section">
+  <div class="chips-grid">
+    <div class="chip-card" id="card-orange">
+      <div class="chip-swatch" style="background:#f97316;border-color:#c2410c;"></div>
+      <div class="chip-count" id="cnt-orange">0</div>
+      <div class="chip-val">$5,000</div>
+    </div>
+    <div class="chip-card" id="card-brown">
+      <div class="chip-swatch" style="background:#92400e;border-color:#451a03;"></div>
+      <div class="chip-count" id="cnt-brown">0</div>
+      <div class="chip-val">$1,000</div>
+    </div>
+    <div class="chip-card" id="card-pink">
+      <div class="chip-swatch" style="background:#ec4899;border-color:#9d174d;"></div>
+      <div class="chip-count" id="cnt-pink">0</div>
+      <div class="chip-val">$500</div>
+    </div>
+    <div class="chip-card" id="card-blue">
+      <div class="chip-swatch" style="background:#3b82f6;border-color:#1d4ed8;"></div>
+      <div class="chip-count" id="cnt-blue">0</div>
+      <div class="chip-val">$100</div>
+    </div>
+  </div>
+
+  <div class="total-row">
+    <span class="total-label">Total</span>
+    <span class="total-amount" id="totalAmt">$0</span>
+  </div>
+
+  <div class="actions">
+    <button class="btn-reset" onclick="resetCounts()">Reset</button>
+    <button class="btn-snap" id="snapBtn" onclick="captureAndAnalyze()">Scan Chips ⬤</button>
+  </div>
+
+  <div class="debug-info" id="debugInfo">Tap "Start Camera" to begin</div>
+</div>
+
+<canvas id="offscreen" style="display:none;"></canvas>
+
+<script>
+const CHIP_COLORS = {
+  orange: { value: 5000, hMin:15, hMax:35,  sMin:0.5, vMin:0.5 },
+  brown:  { value: 1000, hMin:15, hMax:35,  sMin:0.3, vMin:0.15, vMax:0.45 },
+  pink:   { value: 500,  hMin:290,hMax:340, sMin:0.35,vMin:0.45 },
+  blue:   { value: 100,  hMin:195,hMax:240, sMin:0.35,vMin:0.25 }
+};
+
+let stream = null;
+let counts = { orange:0, brown:0, pink:0, blue:0 };
+let isAnalyzing = false;
+
+function rgbToHsv(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r,g,b), min = Math.min(r,g,b), d = max - min;
+  let h = 0, s = max === 0 ? 0 : d / max, v = max;
+  if (d !== 0) {
+    if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+    else if (max === g) h = ((b - r) / d + 2) / 6;
+    else h = ((r - g) / d + 4) / 6;
+  }
+  return { h: h * 360, s, v };
+}
+
+function classifyPixel(r, g, b) {
+  const { h, s, v } = rgbToHsv(r, g, b);
+  if (s < 0.12 || v < 0.1) return null;
+
+  for (const [name, range] of Object.entries(CHIP_COLORS)) {
+    let hInRange;
+    if (range.hMin > range.hMax) {
+      hInRange = h >= range.hMin || h <= range.hMax;
+    } else {
+      hInRange = h >= range.hMin && h <= range.hMax;
+    }
+    if (!hInRange) continue;
+    if (s < range.sMin) continue;
+    if (v < range.vMin) continue;
+    if (range.vMax !== undefined && v > range.vMax) continue;
+    return name;
+  }
+  return null;
+}
+
+async function startCamera() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false
+    });
+    const video = document.getElementById('video');
+    video.srcObject = stream;
+    await video.play();
+
+    document.getElementById('placeholder').style.display = 'none';
+    document.getElementById('captureBtnWrap').style.display = 'block';
+    document.getElementById('snapBtn').style.display = 'block';
+    document.getElementById('statusDot').classList.add('live');
+    document.getElementById('statusText').textContent = 'LIVE';
+    document.getElementById('scanLine').classList.add('active');
+    document.getElementById('debugInfo').textContent = 'Camera ready — tap to scan chips';
+  } catch(e) {
+    document.getElementById('debugInfo').textContent = 'Camera error: ' + e.message;
+    document.getElementById('placeholder').querySelector('p').textContent = 'Camera access denied. Please allow camera permission and reload.';
+  }
+}
+
+function captureAndAnalyze() {
+  if (isAnalyzing) return;
+  isAnalyzing = true;
+
+  const video = document.getElementById('video');
+  const canvas = document.getElementById('offscreen');
+  const W = video.videoWidth || 640;
+  const H = video.videoHeight || 480;
+  canvas.width = W;
+  canvas.height = H;
+
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0, W, H);
+
+  const data = ctx.getImageData(0, 0, W, H).data;
+
+  const colorBuckets = { orange:0, brown:0, pink:0, blue:0 };
+  const step = 4;
+
+  for (let y = 0; y < H; y += step) {
+    for (let x = 0; x < W; x += step) {
+      const i = (y * W + x) * 4;
+      const r = data[i], g = data[i+1], b = data[i+2];
+      const c = classifyPixel(r, g, b);
+      if (c) colorBuckets[c]++;
+    }
+  }
+
+  const totalPixels = (W / step) * (H / step);
+  const detected = { orange:0, brown:0, pink:0, blue:0 };
+  const CHIP_AREA_RATIO = 0.0018;
+
+  for (const color of Object.keys(colorBuckets)) {
+    const ratio = colorBuckets[color] / totalPixels;
+    if (ratio > 0.001) {
+      detected[color] = Math.max(1, Math.round(ratio / CHIP_AREA_RATIO));
+    }
+  }
+
+  updateCounts(detected);
+  showFlash(detected);
+
+  document.getElementById('debugInfo').textContent =
+    `Scanned ${W}×${H}px · orange:${colorBuckets.orange} brown:${colorBuckets.brown} pink:${colorBuckets.pink} blue:${colorBuckets.blue}`;
+
+  setTimeout(() => { isAnalyzing = false; }, 800);
+}
+
+function updateCounts(detected) {
+  for (const color of Object.keys(counts)) {
+    counts[color] = detected[color];
+    document.getElementById('cnt-' + color).textContent = counts[color];
+    document.getElementById('card-' + color).classList.toggle('detected', counts[color] > 0);
+  }
+
+  const total = Object.entries(counts).reduce((s, [c, n]) => s + n * CHIP_COLORS[c].value, 0);
+  document.getElementById('totalAmt').textContent = '$' + total.toLocaleString();
+}
+
+function showFlash(detected) {
+  const total = Object.entries(detected).reduce((s, [c, n]) => s + n * CHIP_COLORS[c].value, 0);
+  const parts = Object.entries(detected).filter(([,n])=>n>0).map(([c,n])=>`${n}× $${CHIP_COLORS[c].value.toLocaleString()}`);
+
+  document.getElementById('flashTotal').textContent = '$' + total.toLocaleString();
+  document.getElementById('flashDetail').textContent = parts.join(' · ') || 'No chips detected';
+
+  const overlay = document.getElementById('resultOverlay');
+  overlay.classList.add('show');
+  setTimeout(() => overlay.classList.remove('show'), 1800);
+}
+
+function resetCounts() {
+  counts = { orange:0, brown:0, pink:0, blue:0 };
+  for (const color of Object.keys(counts)) {
+    document.getElementById('cnt-' + color).textContent = '0';
+    document.getElementById('card-' + color).classList.remove('detected');
+  }
+  document.getElementById('totalAmt').textContent = '$0';
+  document.getElementById('debugInfo').textContent = 'Reset — point camera at chips and scan';
+}
+</script>
+</body>
+</html>
